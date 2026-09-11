@@ -2103,11 +2103,11 @@ impl Interpreter {
                 let param_types: Vec<String> = args
                     .iter()
                     .filter_map(|a| a.annotation.as_ref())
-                    .map(|ann| crate::node_serializer::annotation_type_str(ann))
+                    .map(|ann| crate::annotation::annotation_type_str(ann))
                     .collect();
                 let ret = returns
                     .as_ref()
-                    .map(|r| crate::node_serializer::annotation_type_str(r));
+                    .map(|r| crate::annotation::annotation_type_str(r));
                 // enclosing = 当前环境（闭包捕获——嵌套函数可访问 outer 局部变量）
                 let enclosing = Some(env.clone());
                 // nonlocal 声明名（body 顶层 Nonlocal 语句——赋值重定向外层）
@@ -2798,7 +2798,7 @@ impl Interpreter {
                 };
                 // 自包含性：自由名 ⊆ intrinsic 63 固有集（fresh scope 无用户绑定）
                 let mut refs = std::collections::BTreeSet::new();
-                crate::node_serializer::collect_refs_expr(&value, &mut refs);
+                crate::annotation::collect_refs_expr(&value, &mut refs);
                 let intrinsics: std::collections::BTreeSet<String> =
                     crate::intrinsic_symbols::intrinsic_names().into_iter().collect();
                 if !refs.is_subset(&intrinsics) {

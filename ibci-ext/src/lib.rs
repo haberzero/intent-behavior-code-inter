@@ -22,14 +22,11 @@ mod interpreter;
 mod plugins;
 mod kb;
 mod intrinsic_symbols;
+mod annotation;
 mod lexer;
-mod node_serializer;
 mod parser;
-mod scope_serializer;
 mod serialization;
-mod symbol_resolver;
 mod task_pool;
-mod type_inference;
 
 use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError};
 use pyo3::prelude::*;
@@ -40,37 +37,6 @@ use pyo3::Py;
 #[pyfunction]
 fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
-}
-
-/// IBC 源码 → token 流（Rust lexer；对齐 Python `core/compiler/lexer`）。
-///
-/// 返回 list of dict（每项 = {type, value, line, column, end_line,
-/// end_column, is_at_line_start}）——差分 harness 经此与 Python lexer token
-/// 流逐条比对（type 名 + value + line/column 等价）。
-#[pyfunction]
-fn lex(script: &str, py: Python<'_>) -> PyResult<Py<PyList>> {
-    let tokens = lexer::lex(script);
-    let list = PyList::empty(py);
-    for t in tokens {
-        let d = PyDict::new(py);
-        d.set_item("type", t.type_.name())?;
-        d.set_item("value", t.value)?;
-        d.set_item("line", t.line)?;
-        d.set_item("column", t.column)?;
-        d.set_item("end_line", t.end_line)?;
-        d.set_item("end_column", t.end_column)?;
-        d.set_item("is_at_line_start", t.is_at_line_start)?;
-        list.append(d)?;
-    }
-    Ok(list.unbind())
-}
-
-/// IBC 源码 → AST structure 规范形态（Rust parser；对齐 Python parser 的 AST
-/// structure）。AST 级差分门：经此与 Python `ast_dump(include_positions=False)`
-/// 逐字节比对。
-#[pyfunction]
-fn parse_struct(script: &str) -> String {
-    parser::parse_struct(script)
 }
 
 /// 序列化 artifact（JSON dict 字符串）→ 反序列化 AST 完整形态（含位置）。
@@ -108,340 +74,6 @@ fn node_types(py: Python<'_>) -> PyResult<Py<PyList>> {
     Ok(list.unbind())
 }
 
-/// 序列化 UID（全量 Rust 化·序列化面）：node_uid = `node_<sha256[:16]>`（内容
-/// 确定性，AST 节点 UID）；与 Python core/base/uid.py 的 node_uid 逐条差分等价。
-#[pyfunction]
-fn node_uid(content: &str) -> String {
-    serialization::node_uid(content)
-}
-
-/// 类型 UID：`type_<module>.<name>`（root 模块退化 `type_root.<name>`）；与 Python
-/// type_uid 差分等价。参数序（name 必需在前，module_path Option 在后）适配 pyo3
-/// （Option 后不可跟必需参数）；Python type_uid(module_path, name) 经差分 harness
-/// 按此序调用。
-#[pyfunction]
-fn type_uid(name: &str, module_path: Option<&str>) -> String {
-    serialization::type_uid(module_path, name)
-}
-
-/// 文本资产 UID：`asset_<sha256[:16]>`（内容确定性）；与 Python asset_uid 差分等价。
-#[pyfunction]
-fn asset_uid(text: &str) -> String {
-    serialization::asset_uid(text)
-}
-
-/// 节点数据序列化（全量 Rust 化·序列化面）：IBC 源码 → Rust AST → 节点池（uid →
-/// node_data）。返回 (root_uid, node_pool_json)——node_pool_json = 节点池的 JSON 串
-/// （serde_json）。差分 harness 经此与 Python FlatSerializer 节点池逐条比对。
-#[pyfunction]
-fn serialize_nodes(source: &str) -> PyResult<(String, String)> {
-    let module = parser::parse_to_module(source);
-    let mut serializer = node_serializer::NodeSerializer::new();
-    let (root_uid, node_pool) = serializer.serialize_module(&module);
-    let pool_json = serde_json::to_string(&node_pool)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-    Ok((root_uid, pool_json))
-}
-
-/// scope 符号解析（全量 Rust 化·语义层启动）：IBC 源码 → Rust AST → scope 符号池
-/// （uid → sym_data，用户定义符号[scope_<module>:<name>]）。返回符号池 JSON 串。差分
-/// harness 经此与 Python 语义层 scope 符号逐条比对（区别于 intrinsic 符号[内置类型/
-/// 方法]——归语义层 intrinsic 符号表 Rust 移植后续）。
-#[pyfunction]
-fn resolve_symbols(source: &str) -> PyResult<String> {
-    let module = parser::parse_to_module(source);
-    let mut resolver = symbol_resolver::SymbolResolver::new();
-    let symbols = resolver.resolve_module(&module);
-    serde_json::to_string(symbols)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-}
-
-/// intrinsic 符号表——内置类型（全量 Rust 化·语义层）：返回 42 个 IBC 内置类型的
-/// intrinsic 符号池（uid → sym_data，CLASS 符号）。差分 harness 经此与 Python intrinsic
-/// 符号表内置类型逐条比对（内置函数/方法/模块归后续增量）。
-#[pyfunction]
-fn intrinsic_type_symbols() -> PyResult<String> {
-    let symbols = intrinsic_symbols::builtin_type_symbols();
-    serde_json::to_string(&symbols)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-}
-
-/// intrinsic 符号表完整（全量 Rust 化·语义层）：返回 63 个 intrinsic 符号池
-/// （42 内置类型 CLASS + 19 内置函数 FUNCTION + 2 内置模块 MODULE，uid → sym_data）。
-/// 差分 harness 经此与 Python intrinsic 符号表逐条比对（method = sym_anon_* 归类型解析
-/// 后续）。
-#[pyfunction]
-fn intrinsic_symbol_table() -> PyResult<String> {
-    let symbols = intrinsic_symbols::builtin_intrinsic_symbols();
-    serde_json::to_string(&symbols)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-}
-
-/// intrinsic 类型池（66 non-generic KERNEL_NATIVE 类型基础字段）——Rust 静态表（对齐
-/// Python registry/prelude 固有类型集）。差分 harness 经此与 Python types 池比对。
-#[pyfunction]
-fn intrinsic_type_pool() -> PyResult<String> {
-    let types = intrinsic_symbols::builtin_intrinsic_types();
-    serde_json::to_string(&types)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-}
-
-/// scope 池（全量 Rust 化·artifact 产出：scopes 池）——顶层[63 intrinsic + 用户顶层] +
-/// 函数 scope[用户内符号，parent = 定义处 scope]。差分 harness 经此与 Python scopes 池
-/// 比对（Rust ⊆ Python）。
-#[pyfunction]
-fn scope_pool(source: &str) -> PyResult<String> {
-    let scopes = scope_serializer::scope_pool(source);
-    serde_json::to_string(&scopes)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-}
-
-/// node_to_loc 侧表（全量 Rust 化·artifact 产出：位置侧表）：node_uid →
-/// {file_path: null, line, column}。file_path=null（Rust 无临时文件，架构自然）。
-#[pyfunction]
-fn node_to_loc(source: &str) -> PyResult<String> {
-    serde_json::to_string(&node_serializer::node_to_loc(source))
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-}
-
-/// node_to_type 侧表（全量 Rust 化·artifact 产出：节点级 type_uid）——统一遍历产出
-/// （复用 type_inference：node_uid → type_uid）。差分 harness 经此与 Python node_to_type 比对。
-#[pyfunction]
-fn node_to_type(source: &str) -> PyResult<String> {
-    let module = parser::parse_to_module(source);
-    let mut serializer = node_serializer::NodeSerializer::new();
-    let (_root, _nodes) = serializer.serialize_module(&module);
-    serde_json::to_string(&serializer.node_to_type_map())
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-}
-
-/// node_to_symbol 侧表（全量 Rust 化·artifact 产出：节点级符号 uid）——统一遍历产出
-/// （node_uid → symbol uid：Name 引用[scope 链用户定义 / intrinsic 63 固定集] +
-/// IbAssign/IbFunctionDef/IbArg/IbAlias/for 目标 定义节点）。差分 harness 经此与
-/// Python node_to_symbol 比对。
-#[pyfunction]
-fn node_to_symbol(source: &str) -> PyResult<String> {
-    let module = parser::parse_to_module(source);
-    let mut serializer = node_serializer::NodeSerializer::new();
-    let (_root, _nodes) = serializer.serialize_module(&module);
-    serde_json::to_string(&serializer.node_to_symbol_map())
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-}
-
-/// 完整 artifact（全量 Rust 化·artifact 产出：Rust 独立完整 artifact 闭环）——
-/// source → 完整 artifact JSON（顶层形态与 Python FlatSerializer.serialize_artifact
-/// 同构：entry_module / global_symbols / modules / pools[nodes/symbols/scopes/
-/// types/assets]）。组装：NodeSerializer 统一遍历[nodes + node_to_type/symbol +
-/// 泛型类型 + 用户函数类型 + __string_exec__ 用户模块类型] + scope_serializer
-/// [scopes 池] + SymbolResolver[scope 符号] + intrinsic_symbols[63 intrinsic 符号 +
-/// 66 固定类型条目 + 泛型条目 + 成员符号]。差分 harness 经此与 Python 完整 artifact
-/// 全池比对。
-#[pyfunction]
-/// Rust artifact 组装（source → artifact JSON——纯 CPU 面；full_artifact
-/// pyfunction 与 rust_run_source 全管线共享单一权威源）。
-fn assemble_artifact_json(source: &str) -> String {
-    use serde_json::Map as JMap;
-    use serde_json::Value;
-    let module = parser::parse_to_module(source);
-
-    // 1) NodeSerializer 统一遍历：nodes + 侧表 + 泛型/用户面
-    let mut ns = node_serializer::NodeSerializer::new();
-    let (root_uid, nodes) = ns.serialize_module(&module);
-    // 泛型闭包先取（种子含 node_to_type 值——node_to_type_map 为 mem::take 取走
-    // 语义，顺序敏感）
-    let generics = ns.generic_type_names();
-    let node_to_type = ns.node_to_type_map();
-    let node_to_symbol = ns.node_to_symbol_map();
-    let module_type = ns.entry_module_type_entry();
-    let module_member_kinds = ns.entry_module_member_kinds();
-    let user_function_types = ns.user_function_entries();
-
-    // 2) scopes 池 + scope 符号
-    let scopes = scope_serializer::scope_pool(source);
-    let mut sr = symbol_resolver::SymbolResolver::new();
-    let scope_symbols: JMap<String, Value> = sr
-        .resolve_module(&module)
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-
-    // 3) types 池：66 固定[全字段，IMPORT_GATED 条件包含：eval/quote 仅模块属性
-    //    调用时进池，meta 仅 import 时进池——Python 实证] + 泛型[payload + 继承
-    //    成员表] + 用户函数 + __string_exec__[用户顶层符号成员]
-    // types 池键 = 类型 uid（type_root.<name>——Python types 池键形态）
-    let called_mf = ns.called_module_functions();
-    let imported = ns.imported_modules();
-    let mut types: JMap<String, Value> = intrinsic_symbols::builtin_intrinsic_types()
-        .into_iter()
-        .filter(|(k, _)| match k.as_str() {
-            "eval" | "quote" => called_mf.contains(k),
-            "meta" => imported.contains(k),
-            _ => true,
-        })
-        .map(|(name, entry)| (format!("type_root.{}", name), entry))
-        .collect();
-    for name in &generics {
-        if let Some(e) = intrinsic_symbols::generic_type_entry(name) {
-            types.insert(format!("type_root.{}", name), e);
-        }
-    }
-    for (name, entry) in user_function_types {
-        types.insert(format!("type_root.{}", name), entry);
-    }
-    types.insert("type_root.__string_exec__".to_string(), module_type);
-    // bound_method 共享类型 last-wins 改写（无方法属性访问 = 默认 ([], void)）
-    if let Some((params, ret)) = ns.bound_method_sig() {
-        if let Some(bm) = types.get_mut("type_root.bound_method") {
-            bm["param_type_names"] =
-                Value::Array(params.into_iter().map(Value::String).collect());
-            bm["return_type_name"] = Value::String(ret);
-        }
-    }
-
-    // 4) node_to_loc 侧表（节点池位置字段——全节点，file_path=null）
-    let mut node_to_loc: JMap<String, Value> = JMap::new();
-    for (uid, nd) in nodes.iter() {
-        let mut loc = JMap::new();
-        loc.insert("file_path".into(), Value::Null);
-        loc.insert(
-            "line".into(),
-            nd.get("lineno").cloned().unwrap_or(Value::Null),
-        );
-        loc.insert(
-            "column".into(),
-            nd.get("col_offset").cloned().unwrap_or(Value::Null),
-        );
-        node_to_loc.insert(uid.clone(), Value::Object(loc));
-    }
-
-    // 5) symbols 池：63 intrinsic + scope 符号 + 成员符号（canonical 内容条目）
-    let mut symbols: JMap<String, Value> = intrinsic_symbols::builtin_intrinsic_symbols()
-        .into_iter()
-        .collect();
-    for (uid, sym) in scope_symbols.iter() {
-        symbols.insert(uid.clone(), sym.clone());
-    }
-    let mut module_kinds: std::collections::BTreeMap<String, String> = module_member_kinds
-        .into_iter()
-        .map(|(n, k)| (n, k))
-        .collect();
-    for (tname, tval) in types.iter() {
-        if let Some(members) = tval.get("members_uids").and_then(|m| m.as_object()) {
-            for (mname, muid) in members {
-                let kind = if tname == "type_root.__string_exec__" {
-                    module_kinds.get(mname).cloned().unwrap_or_else(|| "field".to_string())
-                } else {
-                    // 固定/泛型成员：基类成员表 kind（泛型继承基类表；基类名 = 条目
-                    // name 字段[键 = 类型 uid type_root.<name>]）
-                    let entry_name = tval
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(tname);
-                    let base = crate::type_inference::parse_container(entry_name).0;
-                    crate::intrinsic_symbols::METHOD_MEMBERS
-                        .iter()
-                        .find(|(t, _)| *t == base)
-                        .and_then(|(_, ms)| ms.iter().find(|(n, _)| *n == mname))
-                        .map(|(_, k)| k.to_string())
-                        .unwrap_or_else(|| "method".to_string())
-                };
-                let mut m = JMap::new();
-                m.insert("uid".into(), muid.clone());
-                m.insert("name".into(), Value::String(mname.clone()));
-                m.insert("kind".into(), Value::String(kind));
-                m.insert("type_uid".into(), Value::Null);
-                m.insert("node_uid".into(), Value::Null);
-                m.insert("owned_scope_uid".into(), Value::Null);
-                m.insert("metadata".into(), Value::Object(JMap::new()));
-                symbols.insert(muid.as_str().unwrap().to_string(), Value::Object(m));
-            }
-        }
-    }
-
-    // 6) 池 + module 条目 + 顶层
-    let pools: JMap<String, Value> = JMap::from_iter([
-        ("nodes".into(), Value::Object(nodes.into_iter().collect())),
-        ("symbols".into(), Value::Object(symbols.clone())),
-        ("scopes".into(), Value::Object(scopes.into_iter().collect())),
-        ("types".into(), Value::Object(types.clone())),
-        ("assets".into(), Value::Object(JMap::new())),
-    ]);
-    let side_tables: JMap<String, Value> = JMap::from_iter([
-        (
-            "node_to_symbol".into(),
-            Value::Object(
-                node_to_symbol
-                    .into_iter()
-                    .map(|(k, v)| (k, Value::String(v)))
-                    .collect(),
-            ),
-        ),
-        (
-            "node_to_type".into(),
-            Value::Object(
-                node_to_type
-                    .into_iter()
-                    .map(|(k, v)| (k, Value::String(v)))
-                    .collect(),
-            ),
-        ),
-        ("node_to_loc".into(), Value::Object(node_to_loc.into_iter().collect())),
-    ]);
-    let module_entry: JMap<String, Value> = JMap::from_iter([
-        ("import_star_members".into(), Value::Object(JMap::new())),
-        ("pools".into(), Value::Object(pools.clone())),
-        ("root_node_uid".into(), Value::String(root_uid)),
-        ("root_scope_uid".into(), Value::String("scope___string_exec__".to_string())),
-        ("side_tables".into(), Value::Object(side_tables)),
-    ]);
-    let modules: JMap<String, Value> =
-        JMap::from_iter([("__string_exec__".to_string(), Value::Object(module_entry))]);
-    let artifact: JMap<String, Value> = JMap::from_iter([
-        ("entry_module".into(), Value::String("__string_exec__".to_string())),
-        ("global_symbols".into(), Value::Object(JMap::new())),
-        ("modules".into(), Value::Object(modules)),
-        ("pools".into(), Value::Object(pools)),
-    ]);
-    // serde_json::to_string 对本 Value（有限整数/字符串/结构）实质不可失败
-    // （仅非有限浮点序列化报错——值域无浮点条目）
-    serde_json::to_string(&Value::Object(artifact)).unwrap()
-}
-
-#[pyfunction]
-fn full_artifact(source: &str) -> PyResult<String> {
-    Ok(assemble_artifact_json(source))
-}
-
-/// 全 Rust 管线（主线 ⑦"全量转向 Rust"闭环——源 → 执行）：IBC 源 → Rust
-/// lexer/parser → Rust artifact 组装（assemble_artifact_json）→ Rust 反序列化
-/// → Rust 解释器执行。全程不消费 Python 前端（消除"消费 Python 前端 JSON"
-/// 输入边界——双内核输入面收敛为 Rust 单通道）；桥接 = 仅 LLM/意图 IO 边界。
-/// 差分门：数据面与 Python 参考内核逐字节等价（34 语料 + 全探针面）。
-#[pyfunction]
-fn rust_run_source(
-    source: &str,
-    bridge: Option<Bound<'_, PyAny>>,
-    py: Python<'_>,
-) -> PyResult<Py<PyList>> {
-    let bridge_owned = bridge.map(|b| b.unbind());
-    let source_owned = source.to_string();
-    // 全 CPU 面（Rust 前端 + Rust 执行）释放 GIL
-    let artifact_json = assemble_artifact_json(&source_owned);
-    let result = py.allow_threads(|| {
-        interpreter::run_artifact(&artifact_json, bridge_owned)
-    });
-    let lines = match result {
-        Ok(l) => l,
-        Err(payload) => return Err(payload.to_pyerr()),
-    };
-    let list = PyList::empty(py);
-    for line in lines {
-        list.append(line)?;
-    }
-    Ok(list.unbind())
-}
-
-/// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态。stage = 当前阶段（4 = 并发解除[GIL-free 并行执行 + 任务池]）；
 /// status = 就绪门（"concurrency-core" = 并发核心就绪[GIL-free 并行执行
 /// [run_artifacts_parallel + TaskPool] + 数据面经 run_artifact 可用]；"ready" =
@@ -632,17 +264,6 @@ fn call_plugin(py: Python<'_>, name: &str, args: &Bound<'_, PyAny>) -> PyResult<
     Ok(plugin_value_to_py(py, &result))
 }
 
-#[pyfunction]
-fn rust_intrinsic_names(py: Python<'_>) -> PyResult<Py<PyList>> {
-    // 派生自 interpreter 内征分发表（INTRINSICS + EXCEPTION_CLASSES + meta
-    // 面）——单一权威源，杜绝"清单 vs 分发臂"双真相漂移（审计 3.4）
-    let names = interpreter::intrinsic_names();
-    let list = PyList::empty(py);
-    for n in names {
-        list.append(n)?;
-    }
-    Ok(list.unbind())
-}
 
 /// 内核能力声明（P1 协议——架构 v2 R0 §三）：node_types / intrinsic_names /
 /// native_modules / unported_corners[{feature, reason}] JSON。路由判定 =
@@ -915,28 +536,11 @@ fn run_artifacts_parallel(
 fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(kernel_info, m)?)?;
-    m.add_function(wrap_pyfunction!(lex, m)?)?;
-    m.add_function(wrap_pyfunction!(parse_struct, m)?)?;
     m.add_function(wrap_pyfunction!(deserialize_struct, m)?)?;
     m.add_function(wrap_pyfunction!(symbol_table, m)?)?;
     m.add_function(wrap_pyfunction!(type_table, m)?)?;
     m.add_function(wrap_pyfunction!(node_types, m)?)?;
-    m.add_function(wrap_pyfunction!(node_uid, m)?)?;
-    m.add_function(wrap_pyfunction!(type_uid, m)?)?;
-    m.add_function(wrap_pyfunction!(asset_uid, m)?)?;
-    m.add_function(wrap_pyfunction!(serialize_nodes, m)?)?;
-    m.add_function(wrap_pyfunction!(resolve_symbols, m)?)?;
-    m.add_function(wrap_pyfunction!(intrinsic_type_symbols, m)?)?;
-    m.add_function(wrap_pyfunction!(intrinsic_symbol_table, m)?)?;
-    m.add_function(wrap_pyfunction!(intrinsic_type_pool, m)?)?;
-    m.add_function(wrap_pyfunction!(scope_pool, m)?)?;
-    m.add_function(wrap_pyfunction!(node_to_loc, m)?)?;
-    m.add_function(wrap_pyfunction!(node_to_type, m)?)?;
-    m.add_function(wrap_pyfunction!(node_to_symbol, m)?)?;
-    m.add_function(wrap_pyfunction!(full_artifact, m)?)?;
-    m.add_function(wrap_pyfunction!(rust_run_source, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact_state, m)?)?;
-    m.add_function(wrap_pyfunction!(rust_intrinsic_names, m)?)?;
     m.add_function(wrap_pyfunction!(capability, m)?)?;
     m.add_function(wrap_pyfunction!(call_top_level_function, m)?)?;
     m.add_function(wrap_pyfunction!(load_plugin, m)?)?;

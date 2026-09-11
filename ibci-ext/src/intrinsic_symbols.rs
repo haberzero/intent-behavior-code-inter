@@ -399,7 +399,7 @@ fn members_value(type_name: &str, owner_uid: &str) -> Value {
 /// 跨基类/泛型区分]。tuple 泛型：element_type_name = any + positional 实参表（Python
 /// 实证）。
 pub fn generic_type_entry(name: &str) -> Option<Value> {
-    let (kind, params) = crate::type_inference::parse_container(name);
+    let (kind, params) = crate::annotation::parse_container(name);
     let uid = format!("type_root.{}", name);
     let mut m = serde_json::Map::new();
     m.insert("uid".into(), Value::String(uid.clone()));
