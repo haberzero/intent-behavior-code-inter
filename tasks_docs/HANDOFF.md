@@ -735,6 +735,44 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   测试脚本可自由处理（重构/修正/删除）——重构的质量原则大于维持现状的重要性。已同步
   AGENTS.md §测试 / NEXT_STEPS 基线锚点 / HANDOFF §1.2 / WORKLOG §二。
 
+### 2.0.1 🔴 下一位智能体接手指引（2026-09-11，D8 后）
+
+**当前架构（⑦ 终点核心达成）**：
+- **Rust = 唯一语义执行内核**（`ibci-ext/`：deserializer[artifact 消费] +
+  interpreter[执行] + kb[知识库] + intrinsic_symbols + annotation[纯 AST 辅助] +
+  plugins + task_pool）。**Python = 编译器（前端）+ LLM/宿主执行层**。无转录层
+  （差分机制 + 语义转录组件已全部退场）。
+- **路由（单内核归属纪律）**：`artifact_is_rust_executable` — 节点类型全集 ⊆
+  Rust 反序列化器覆盖 + 内征 ⊆ intrinsic 表 + imports ⊆ native_modules
+  （meta/compute_engine/plugins/fs/world_model/ai）+ 角检测（仅剩 meta_compile
+  = 编译器访问面，宿主路由正确保留）。**async/ihost = 宿主执行层保留**（Rust
+  顺序内核无 CPS 并发——职责重定位）。
+- **宿主桥接（D2）**：bridge = HostService（模块懒 setup + vtable 契约分派
+  [loader proxy 单一权威——unbox_args/装箱] + 对象系统 receive + 显式错误传播 +
+  host_pyerr_to_thrown[code+line 贯通]）；engine _execute_rust 补设当前 EC/帧
+  （finally 重置）。
+
+**接手动作（按优先级）**：
+1. **周期维护（Tier B）**：内核健康扫描（静默路径/死代码/双写——对照 D8 的
+   get_host_attribute 静默路径 + serialization.rs 死代码清理先例）+ 文档对账。
+2. **路由余面核查**：try 源已路由 Rust（D8）；可用 `artifact_is_rust_executable`
+   + `ArtifactView.node_types - cap.node_types` 找其余未覆盖节点类型（若有新
+   语义面暴露 → 按 D8 模式修复：先直调内核验证，再全量门）。
+3. **PENDING 重估触发项**（`PENDING_TASKS.md` 状态单点）：PT-DECIDE-2 已重估
+   （后端强制思考机制完整）；无阻塞项。
+4. **已知边界（勿触碰或先分析）**：parser 宽松解析（语法错误追踪已加——expect
+   失配/意外 token/消耗检查——但解析面仍宽松，勿假设全量 fail-fast）；
+   错误消息格式（诊断码前缀 + 源定位 = Python 契约渲染面——镜像
+   runtime_error_map 于 ErrorKind.run_code）；e.message/e.class = 异常对象字段。
+
+**关键命令/环境**：构建 `bash scripts/build_rust_ext.sh`（CARGO_HOME/CARGO_TARGET_DIR
+pin workspace）；内核测试 `bash scripts/test_rust.sh`（RUSTFLAGS 链 python3.12）；
+唯一 pytest 命令 `.venv/bin/python -m pytest tests/`（当前基线 4268/0/1）；
+分支 unsafe-vibe-dev（push 已获用户授权；main 永不触碰）。
+
+**下一轮建议**：先跑全量确认基线 → Tier B 扫描（D8 变更后的新面：parser 错误
+追踪 + call_meta_fn Result 化 + engine EC）→ 文档对账收束。
+
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
 > round3 试用需求整合 / meta 层 MVP / VISION-6 P1-P6 的收束历史不在本节登记（章程红线：
