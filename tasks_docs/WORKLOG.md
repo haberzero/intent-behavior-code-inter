@@ -5663,6 +5663,20 @@ interpreter.rs = 生产，消费 parser 的 AST 类型定义）。
   权威（数据面 + 前端差分全部退役）。
 - 验证：cargo build + 内核单测 6/0 + 全量 pytest 4268/0/1。
 
+## 阶段 D8：try 源路由 Rust 暴露缺口修复（2026-09-11，commit dc066da4）
+
+- **触发**：Tier B 扫描发现 get_host_attribute 静默路径 → 修复后全量 → 9 失败
+  ——根因 = **路由缺 IbExceptHandler 节点类型**（try 源此前送 Python，Rust
+  try/except/quote/eval 语义面从未被引擎验证——差分退役后暴露）。
+- **修复**：① try/except（裸 except 全捕获 / handler 再抛 = 最新异常[原丢 t2] /
+  运行时错误类 → Exception 父链 / InterpreterError → Exception）② 异常对象
+  e.message/e.class 字段 ③ quote/eval（语法错误 fail-fast[parser 错误追踪 +
+  error_pos 源定位] / 语句源拒绝 / 自包含门 fail-fast / eval 错误上抛[原静默
+  None] / eval 函数值结果槽缺失）④ 错误消息 = 诊断码前缀 + 源定位 ⑤ engine
+  宿主 frame EC 补设 + finally 重置（防泄漏序污染）⑥ 死代码清理
+  （serialization.rs）。
+- **验证**：cargo build + 内核单测 + 全量 pytest 4268/0/1。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
