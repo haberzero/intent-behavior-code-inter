@@ -204,6 +204,14 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   PENDING 重估触发项；⑦ 终点核心已达成——Rust 语义内核权威 + 无转录层；
   async/ihost = 宿主执行层保留[职责重定位]；无待裁主线项）**。历史：P9 全量
   Rust 化（迁移期——差分机制已全部退场，下述为历史记录）。
+- **✅ 阶段 D8（2026-09-11，commit dc066da4）try 源路由 Rust 暴露缺口修复**：
+  路由缺 IbExceptHandler → try 源此前送 Python（Rust try/except/quote/eval 语义
+  面从未被引擎验证——差分退役后暴露，9 失败）。修复：try/except（裸 except /
+  handler 再抛 = 最新异常 / 运行时错误类 → Exception 父链）、异常对象
+  e.message/e.class 字段、quote/eval 全门（语法错误 fail-fast[parser 错误追踪 +
+  源定位] / 语句源拒绝 / 自包含门 / eval 错误上抛 / 函数值结果槽缺失）、错误
+  消息诊断码前缀 + 源定位、engine 宿主 frame EC 补设 + finally 重置。全量
+  4268/0/1。
   Py<PyAny>，8902 行 IbValue 扩展] → KB/quoted/meta 推理面唯一真相[消 host 桥接双真相]
   → CPS 同构[tree-walking → CPS 分发表，覆盖差 31→53 收缩]；第三批已收官[full_artifact
   Rust 独立完整 artifact 产出——34 语料五池 uid 精确 + 全字段等价；bound_method 共享
