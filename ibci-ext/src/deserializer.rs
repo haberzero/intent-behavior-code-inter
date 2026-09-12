@@ -596,7 +596,7 @@ pub fn node_types() -> Vec<&'static str> {
         // 语句
         "IbAssign", "IbAugAssign", "IbExprStmt", "IbIf", "IbFor", "IbFunctionDef",
         "IbReturn", "IbBreak", "IbContinue", "IbPass", "IbImport", "IbImportFrom",
-        "IbWhile", "IbTry", "IbClassDef", "IbGlobalStmt", "IbNonlocalStmt",
+        "IbWhile", "IbTry", "IbExceptHandler", "IbClassDef", "IbGlobalStmt", "IbNonlocalStmt",
         "IbRaise", "IbSwitch", "IbCase",
         // 内联消费（池节点——arg_of / alias 字段 builder）
         "IbArg", "IbAlias",

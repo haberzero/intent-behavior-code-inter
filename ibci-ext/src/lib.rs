@@ -25,7 +25,6 @@ mod intrinsic_symbols;
 mod annotation;
 mod lexer;
 mod parser;
-mod serialization;
 mod task_pool;
 
 use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError};

@@ -626,11 +626,16 @@ impl Module {
 struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    /// 语法错误标记（expect 失配等静默点——quote 门 fail-fast 消费；
+    /// 旧 = 无错误追踪[宽松解析]，语法错误静默）
+    had_error: bool,
+    /// 错误位置（首个错误 token 的 line/col——消息源定位渲染）
+    error_pos: Option<(i64, i64)>,
 }
 
 impl Parser {
     fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, pos: 0 }
+        Parser { tokens, pos: 0, had_error: false, error_pos: None }
     }
     fn peek(&self) -> &Token {
         if self.pos < self.tokens.len() {
@@ -660,8 +665,19 @@ impl Parser {
     fn expect(&mut self, ty: TokenType) {
         if self.at(ty) {
             self.advance();
+        } else {
+            // 期望 token 缺失 = 语法错误（fail-fast 消费面）
+            self.mark_error();
         }
     }
+    fn mark_error(&mut self) {
+        self.had_error = true;
+        if self.error_pos.is_none() {
+            let t = self.peek();
+            self.error_pos = Some((t.line as i64, t.column as i64));
+        }
+    }
+
     fn skip_newlines(&mut self) {
         while self.at(TokenType::Newline) {
             self.advance();
@@ -675,6 +691,11 @@ impl Parser {
             let stmt = self.parse_stmt();
             body.push(stmt);
             self.skip_newlines();
+        }
+        // 宽松解析的语法错误检测：语句解析后未消费到 Eof（尾随 token = 坏源
+        // 残留）→ 标记错误（quote 门 fail-fast 消费；旧 = 静默接受坏源）
+        if self.pos + 1 < self.tokens.len() {
+            self.mark_error();
         }
         Module {
             pos: Pos::module(),
@@ -2058,6 +2079,9 @@ impl Parser {
                 }
             }
             _ => {
+                // 意外 token = 语法错误（宽松兜底 = 占位 Name——had_error 标记
+                // 供 quote 门 fail-fast 消费）
+                self.mark_error();
                 let tok = self.advance();
                 Expr::Name {
                     pos: Pos::from_token(&tok),
@@ -2196,8 +2220,10 @@ pub fn parse_struct(source: &str) -> String {
 }
 
 /// 解析 IBCI 源码 → Rust AST（Module）——供节点数据序列化消费。
-pub fn parse_to_module(source: &str) -> Module {
+/// 解析 IBCI 源码 → (Rust AST, 语法错误标记, 错误位置)——quote 门 fail-fast 消费。
+pub fn parse_to_module(source: &str) -> (Module, bool, Option<(i64, i64)>) {
     let tokens = lex(source);
     let mut parser = Parser::new(tokens);
-    parser.parse_module()
+    let module = parser.parse_module();
+    (module, parser.had_error, parser.error_pos)
 }

@@ -572,9 +572,32 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             _bridge = None
             if self.interpreter is not None and self.interpreter.service_context is not None:
                 _bridge = self.interpreter.service_context.host_service
-            lines, state = kernel.run_artifact_state(
-                artifact_json, _bridge, variables if variables else None
-            )
+                # 宿主 frame 上下文（当前 EC/帧——run_batch 等模块方法的
+                # get_current_execution_context 查找；Rust 路径不触发
+                # interpreter.run 的上下文设置，此处等价补设）
+                from core.runtime.frame import (
+                    set_current_frame,
+                    set_current_execution_context,
+                    reset_current_frame,
+                    reset_current_execution_context,
+                )
+
+                _frame_tok = set_current_frame(
+                    self.interpreter.execution_context.runtime_context
+                )
+                _ec_tok = set_current_execution_context(
+                    self.interpreter.execution_context
+                )
+            try:
+                lines, state = kernel.run_artifact_state(
+                    artifact_json, _bridge, variables if variables else None
+                )
+            finally:
+                # 上下文重置覆盖异常路径（旧 = 仅成功路径——异常泄漏 EC 致
+                # 后续测试序污染）
+                if _bridge is not None:
+                    reset_current_execution_context(_ec_tok)
+                    reset_current_frame(_frame_tok)
         except RuntimeError as e:
             # RustRuntimeError = 类型化错误契约（P3：error_class/code/line/
             # column/detail 结构化字段——替代旧"uncaught exception"消息子串 +

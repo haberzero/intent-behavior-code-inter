@@ -1005,6 +1005,21 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
+    /// 类映射诊断码（消息渲染面——镜像 Python runtime_error_map 的
+    /// _CLASS_TO_RUN_CODE：异常类 → RUN_*；未映射 = None[引擎回退]）。
+    pub fn run_code(self) -> Option<&'static str> {
+        match self {
+            ErrorKind::TypeError => Some("RUN_TYPE_MISMATCH"),
+            ErrorKind::ZeroDivisionError => Some("RUN_DIVISION_BY_ZERO"),
+            ErrorKind::IndexError | ErrorKind::KeyError => Some("RUN_INDEX_ERROR"),
+            ErrorKind::AttributeError => Some("RUN_ATTRIBUTE_ERROR"),
+            ErrorKind::ValueError
+            | ErrorKind::NameError
+            | ErrorKind::OverflowError
+            | ErrorKind::RecursionError => None,
+        }
+    }
+
     pub fn class_name(self) -> &'static str {
         match self {
             ErrorKind::TypeError => "TypeError",
@@ -1030,10 +1045,17 @@ pub(crate) fn runtime_error(kind: ErrorKind, message: &str) -> Thrown {
 /// 运行时环境错误 + 语义诊断码（EMB_/KNW_ 等契约码——语义层单一权威码直接
 /// 承载，不经 class_name 派生；engine 边界优先取 code）。
 pub(crate) fn runtime_error_coded(kind: ErrorKind, message: &str, code: Option<&str>) -> Thrown {
+    // 消息渲染面 = 诊断码前缀（Python 契约：e.message = "[ERROR][CODE]: ..."——
+    // 码 = 显式语义码优先，无则类映射码；无码 = 原消息）
+    let display_code = code.or_else(|| kind.run_code());
+    let display_message = match display_code {
+        Some(c) => format!("[ERROR][{c}]: {message}"),
+        None => message.to_string(),
+    };
     Thrown {
         value: IbValue::Error {
             class: kind.class_name().to_string(),
-            message: message.to_string(),
+            message: display_message,
         },
         pos: None,
         code: code.map(|c| c.to_string()),
@@ -1093,9 +1115,6 @@ impl std::fmt::Debug for Function {
 impl Environment {
     /// 顶层变量快照（host 桥接面——lib 模块状态导出；含函数值
     /// [vars 双写面]）。
-    pub fn snapshot_vars(&self) -> Vec<(String, IbValue)> {
-        self.vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-    }
 
     fn new(parent: Option<Rc<RefCell<Environment>>>) -> Environment {
         Environment {
@@ -2242,6 +2261,8 @@ impl Interpreter {
                     let mut handled = false;
                     for h in handlers {
                         let matched = match &h.exc_type {
+                            // 裸 except = 全捕获（Python 契约）
+                            None => true,
                             Some(Expr::Name { id, .. }) => {
                                 exception_assignable(&exc_value, id)
                             }
@@ -2258,7 +2279,9 @@ impl Interpreter {
                             Ok(Flow::Next) => {}
                             Ok(sig) => pending = Some(sig),
                             Err(t2) => {
-                                // handler 内再抛 = 未处理（finally 后 re-raise）
+                                // handler 内再抛 = 未处理（raised = 最新异常——
+                                // 后续 handler 不再匹配[匹配面 = 原异常]，
+                                // finally 后 re-raise 最新）
                                 raised = Some(t2);
                                 continue;
                             }
@@ -2272,6 +2295,11 @@ impl Interpreter {
                             Ok(Flow::Next) => {}
                             Ok(sig) => return Ok(sig), // finally signal 覆盖
                             Err(t2) => return Err(t2),
+                        }
+                        // 无匹配 / handler 再抛：re-raise 最新异常（raised——
+                        // handler 内再抛覆盖原异常[Python 语义：新异常传播]）
+                        if let Some(t) = &raised {
+                            return Err(t.clone());
                         }
                         return Err(Thrown { value: exc_value, pos: None, code: None });
                     }
@@ -2442,7 +2470,7 @@ impl Interpreter {
                                     .iter()
                                     .map(|a| self.eval_expr(env, a, output))
                                     .collect::<Result<Vec<IbValue>, _>>()?;
-                                return Ok(self.call_meta_fn(attr, arg_vals, output));
+                                return self.call_meta_fn(attr, arg_vals, output);
                             }
                         }
                         let obj = self.eval_expr(env, value, output)?;
@@ -2471,7 +2499,7 @@ impl Interpreter {
                         let binding = env.borrow().get(&func_name); // 自有值（Ref 语句末释放——不贯穿调用体）
                         match binding {
                             Some(IbValue::MetaFn(n)) => {
-                                self.call_meta_fn(&n, arg_vals, output)
+                                self.call_meta_fn(&n, arg_vals, output)?
                             }
                             // 函数值（一等值别名——fn f = g / x = g）→ 按值调用
                             Some(IbValue::Function(f)) => {
@@ -2537,6 +2565,13 @@ impl Interpreter {
                     // quoted 的 source 字段（原生——完整源串）
                     IbValue::Quoted { ref source } if attr == "source" => {
                         IbValue::Str(source.clone())
+                    }
+                    // 异常对象的 class/message 字段（Python IbException 契约）
+                    IbValue::Error { class, message } if attr == "message" => {
+                        IbValue::Str(message.clone())
+                    }
+                    IbValue::Error { class, .. } if attr == "class" => {
+                        IbValue::Str(class.clone())
                     }
                     // 宿主对象属性访问——委托 Python（错误显式传播）
                     IbValue::Host(h) => self.get_host_attribute(&h, attr)?,
@@ -2781,20 +2816,43 @@ impl Interpreter {
     /// interpreter 在 fresh 环境执行（无用户全局——自包含门已保证；stdout 面
     /// 丢弃[同 silent=True]，返回表达式值）。子进程进程级隔离 = 资源治理面，
     /// 数据面语义等价于 fresh scope 隔离（语料零 LLM / 零跨进程状态依赖）。
-    fn call_meta_fn(&self, name: &str, args: Vec<IbValue>, output: &mut Vec<String>) -> IbValue {
+    fn call_meta_fn(
+        &self,
+        name: &str,
+        args: Vec<IbValue>,
+        output: &mut Vec<String>,
+    ) -> Result<IbValue, Thrown> {
         match name {
             "quote" => {
                 let Some(IbValue::Str(source)) = args.first() else {
-                    return IbValue::None_;
+                    return Ok(IbValue::None_);
                 };
                 if source.trim().is_empty() {
-                    return IbValue::None_;
+                    return Ok(IbValue::None_);
                 }
-                let module = crate::parser::parse_to_module(source);
-                // 表达式性：单表达式语句（__qeval__ = <source> 可编译 ⟺ source 是表达式）
+                let (module, parse_err, err_pos) = crate::parser::parse_to_module(source);
+                // 语法错误 = fail-fast（quote 门：parse 错误显式拒绝——不静默；
+                // 消息含源定位[__string_exec__ 合成 entry——同 Python 编译面]）
+                if parse_err {
+                    let loc = match err_pos {
+                        Some((l, c)) => format!(" at __string_exec__.ibci:line {l}, column {c}"),
+                        None => String::new(),
+                    };
+                    return Err(runtime_error(
+                        ErrorKind::ValueError,
+                        &format!("quote: 语法错误{loc}"),
+                    ));
+                }
+                // 表达式性：单表达式语句（__qeval__ = <source> 可编译 ⟺ source 是
+                // 表达式）——语句源 = fail-fast 拒绝（Python 契约；旧 = 静默 None_）
                 let value = match &module.body[..] {
                     [crate::parser::Stmt::ExprStmt { value, .. }] => value.clone(),
-                    _ => return IbValue::None_,
+                    _ => {
+                        return Err(runtime_error(
+                            ErrorKind::ValueError,
+                            "quote: 源码须为单表达式（语句源拒绝）",
+                        ))
+                    }
                 };
                 // 自包含性：自由名 ⊆ intrinsic 63 固有集（fresh scope 无用户绑定）
                 let mut refs = std::collections::BTreeSet::new();
@@ -2802,31 +2860,51 @@ impl Interpreter {
                 let intrinsics: std::collections::BTreeSet<String> =
                     crate::intrinsic_symbols::intrinsic_names().into_iter().collect();
                 if !refs.is_subset(&intrinsics) {
-                    return IbValue::None_;
+                    // 自包含门 fail-fast（Python 契约：自由名 = quote 时刻拒绝；
+                    // 旧 = 静默 None_[语义缺口]）
+                    return Err(runtime_error(
+                        ErrorKind::ValueError,
+                        "quote: 源码引用自由名（非 intrinsic 固有集）",
+                    ));
                 }
-                IbValue::Quoted { source: source.clone() }
+                Ok(IbValue::Quoted { source: source.clone() })
             }
             "eval" => {
                 let Some(IbValue::Quoted { source }) = args.first() else {
-                    return IbValue::None_;
+                    return Ok(IbValue::None_);
                 };
-                let module = crate::parser::parse_to_module(source);
+                let (module, parse_err, _err_pos) = crate::parser::parse_to_module(source);
+                if parse_err {
+                    return Err(runtime_error(ErrorKind::ValueError, "eval: 语法错误"));
+                }
                 let value = match &module.body[..] {
                     [crate::parser::Stmt::ExprStmt { value, .. }] => value.clone(),
-                    _ => return IbValue::None_,
+                    _ => return Ok(IbValue::None_),
                 };
+                // 函数面表达式（lambda）——值通道不可取回（结果槽缺失——Python
+                // 契约 fail-fast；Lambda 非值语义面[Rust 求值 = None_ 为占位]）
+                if matches!(value, crate::parser::Expr::Lambda { .. }) {
+                    return Err(runtime_error(
+                        ErrorKind::ValueError,
+                        "eval: 表达式值为函数（值通道不可取回）",
+                    ));
+                }
                 // 隔离执行（fresh 环境——与主执行同构：intrinsic 经 call_function
                 // 分发；silent stdout 面丢弃）
                 let fresh = Rc::new(RefCell::new(Environment::new(None)));
                 let mut silent_output: Vec<String> = Vec::new();
-                // 隔离执行取回值；执行期 raise = 错误面（None_——meta.eval 语料
-                // 面无 raise 探针，跨切面错误面统一后续）
+                // 隔离执行取回值；执行期 raise = fail-fast 上抛（错误透传——
+                // IBCI try/except 可捕获；旧 = 静默 None_[语义缺口]）；函数值
+                // = 值通道不可序列化（结果槽缺失——Python 契约 fail-fast）
                 match self.eval_expr(&fresh, &value, &mut silent_output) {
-                    Ok(v) => v,
-                    Err(_) => IbValue::None_,
+                    Ok(IbValue::Function(_)) => Err(runtime_error(
+                        ErrorKind::ValueError,
+                        "eval: 表达式值为函数（值通道不可取回）",
+                    )),
+                    other => other,
                 }
             }
-            _ => IbValue::None_,
+            _ => Ok(IbValue::None_),
         }
     }
 
@@ -3061,8 +3139,7 @@ fn knowledge_from_state(
     py: Python<'_>,
     state: &Bound<'_, PyDict>,
 ) -> Option<IbValue> {
-    use crate::kb::{KbEntry, KbEntryEvent, KbEvent, KbFact, KbRelation, KbState, KbWord, KbWorld};
-    use pyo3::IntoPy;
+    use crate::kb::{KbEntry, KbEvent, KbFact, KbRelation, KbState, KbWord, KbWorld};
     let get = |k: &str| state.get_item(k).ok().flatten();
     let seq: i64 = get("seq")?.extract().ok()?;
     let mut st = KbState::blank();

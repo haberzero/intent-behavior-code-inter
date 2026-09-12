@@ -108,7 +108,3 @@ impl ErrorPayload {
     }
 }
 
-/// Thrown → 类型化 PyErr（GIL 侧便捷入口）。
-pub(crate) fn thrown_to_pyerr(t: &Thrown) -> PyErr {
-    ErrorPayload::from_thrown(t.clone()).to_pyerr()
-}
